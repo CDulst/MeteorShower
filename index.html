@@ -17,6 +17,16 @@
      display: block;
      cursor: url('Textures/cursor.jpg'), pointer;
   }
+  .text{
+  position: absolute;
+  color:white;
+	bottom: 10px;
+	width: 100%;
+  font-size:3rem;
+	text-align: center;
+	z-index: 100;
+	display:block;
+  }
   </style>
 <body>
   
@@ -27,6 +37,10 @@ import * as THREE from 'https://threejsfundamentals.org/threejs/resources/threej
 const init = () => {
 //Canvas and rendered
   const canvas = document.querySelector('#c');
+  const p = document.createElement("p");
+  p.innerText = " | Hold Space To Shoot |"
+  p.classList.add("text")
+  document.body.appendChild(p);
   const renderer = new THREE.WebGLRenderer({canvas});
   renderer.autoClearColor = false;
   const camera = createCamera();
@@ -128,25 +142,75 @@ scene.background = backgroundTexture;
 const meteorUniforms = createUniform(0,new THREE.Vector3(1, 1, 1) , meteorTexture);
 //Matererials
 const meteorMaterial = createMaterial(vertexShader,fragmentShader,meteorUniforms);
+const bulletMaterial = new THREE.MeshBasicMaterial({color: 0x44aa88});
 //Objects
 const meteorites = [];
+const bullets = []
 //Spawners
+let firing = false;
+let text = true;
+let pos1 = 0;
+let shootPositionX = 0;
+let shootPositionY = 0;
+
+
+const mouseHandler = (e) => {
+const rect = canvas.getBoundingClientRect();
+pos1 = {
+  x: (event.clientX - rect.left) * canvas.width  / rect.width,
+  y: (event.clientY - rect.top ) * canvas.height / rect.height,
+}
+shootPositionX = (pos1.x / canvas.width ) * 2- 1;
+shootPositionY = (pos1.y / canvas.height) * -2 + 1;
+
+}
+
+const downHandler = (e) => {
+console.log(e);
+if (text){
+  document.body.removeChild(p);
+  text = false;
+}
+if (e.code === "Space"){
+firing = true;
+}
+}
+const upHandler = (e) => {
+if (e.code === "Space"){
+firing = false;
+}
+}
+document.addEventListener("keydown", downHandler)
+document.addEventListener("keyup", upHandler)
+canvas.addEventListener("mousemove", mouseHandler)
+
 const spawnMeteor = () => {
-  const meteor = makeInstance(GeoMeteor, meteorMaterial, Math.floor((Math.random() * 5) - 3), 0,0)
+  const meteor = makeInstance(GeoMeteor, meteorMaterial, Math.floor((Math.random() * 2) - 1),Math.floor((Math.random() * 3) - 1),0)
   scene.add(meteor);
   meteorites.push(meteor);
   console.log(meteor.material);
   setTimeout(() => {
   spawnMeteor();
-  }, 2500);
+  }, 1500);
+}
+const spawnBullet = () => {
+  if (firing){
+  const bullet = makeInstance(GeoBullet, bulletMaterial,shootPositionX,shootPositionY,19)
+  scene.add(bullet);
+  bullets.push(bullet);
+}
+  setTimeout(() => {
+  spawnBullet();
+  }, 300);
 }
 
+  spawnBullet();
   spawnMeteor();
    
   
   //Render it boi/ add rotation and shit
   function render(time) {
-      time *= 0.001;  // convert to seconds
+      time *= 0.002;  // convert to seconds
 
 
     if (resizeRendererToDisplaySize(renderer)) {
@@ -154,14 +218,36 @@ const spawnMeteor = () => {
       camera.aspect = canvas.clientWidth / canvas.clientHeight;
       camera.updateProjectionMatrix();
     }
+    console.log(meteorites);
 
-    meteorites.forEach((cube, ndx) => {
-      const speed = 1 + ndx * .1;
+    // Meteorites loop
+    meteorites.forEach((meteor) => {
+      let index = meteorites.indexOf(meteor);
+      const speed = 1;
       const rot = time * speed;
-      cube.rotation.x = rot;
-      cube.rotation.y = rot;
-      cube.position.z += 0.05;
+      meteor.rotation.x = rot;
+      meteor.rotation.y = rot;
+      if (meteor.position.z > 20)
+      {
+        shredder(scene,index,meteorites,meteor);
+      }
+      else
+      {
+        meteor.position.z += 0.08;
+      }
     });
+
+    bullets.forEach(bullet => {
+      let index = bullets.indexOf(bullet);
+      bullet.position.x -= 0.01;
+      if (bullet.position.z <= 0){
+        shredder(scene,index,bullets,bullet);
+      }
+      bullet.position.z -= 0.3;
+    });
+
+
+ 
     
     meteorUniforms.iTime.value = time;
 
@@ -174,6 +260,16 @@ requestAnimationFrame(render);
 }
 
 
+
+
+
+//Shred object
+
+const shredder = (scene,index,objects,object) => {
+    scene.remove(object)
+    objects.splice(index,1);
+  
+}
 
 //Check if responsive
 const  resizeRendererToDisplaySize = (renderer) =>  {
@@ -234,12 +330,15 @@ const createTexture = (loader,file,wrapping) => {
 }
 
 const createBulletGEO = () => {
-//To be filled in
+  const radius = 0.1;  
+
+const geometry = new THREE.OctahedronBufferGeometry(radius);
+return geometry;
 }
 
 
 const createMeteoriteGEO = () => {
-const radius = 1;  
+const radius = 0.8;  
 const detail = 1;  
 const geometry = new THREE.TetrahedronBufferGeometry(radius, detail);
 return geometry;
