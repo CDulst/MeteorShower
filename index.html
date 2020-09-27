@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="ie=edge">
+  <title>WebGL</title>
+</head>
+<style>
+  html, body {
+     margin: 0;
+     height: 100%;
+  }
+  #c {
+     width: 100%;
+     height: 100%;
+     display: block;
+     cursor: url('Textures/cursor.jpg'), pointer;
+  }
+  </style>
+<body>
+  
+  <canvas id="c"></canvas>
+
+  <script type="module">
+import * as THREE from 'https://threejsfundamentals.org/threejs/resources/threejs/r119/build/three.module.js';
+const init = () => {
+//Canvas and rendered
+  const canvas = document.querySelector('#c');
+  const renderer = new THREE.WebGLRenderer({canvas});
+  renderer.autoClearColor = false;
+  const camera = createCamera();
+  setCameraPosition(camera,0,0,20);
+
+  //Scene and geomotry
+   const scene = new THREE.Scene();
+   const GeoMeteor = createMeteoriteGEO();
+   const GeoBullet = createBulletGEO();
+   createBulletGEO();
+
+  //Create shaders
+  const fragmentShader = `
+  #include <common>
+
+  uniform vec3 iResolution;
+  uniform float iTime;
+  uniform sampler2D iChannel0;
+
+  varying vec2 vUv;
+
+
+  /// random2 function by Patricio Gonzalez
+vec2 random2( vec2 p ) {
+    return fract(sin(vec2(dot(p,vec2(127.1,311.7)),dot(p,vec2(269.5,183.3))))*43758.5453);
+}
+
+// Value Noise by Inigo Quilez - iq/2013
+// https://www.shadertoy.com/view/lsf3WH
+float noise(vec2 st) {
+    vec2 i = floor(st);
+    vec2 f = fract(st);
+
+    vec2 u = f*f*(3.0-2.0*f);
+
+    return mix( mix( dot( random2(i + vec2(0.0,0.0) ), f - vec2(0.0,0.0) ), 
+                     dot( random2(i + vec2(1.0,0.0) ), f - vec2(1.0,0.0) ), u.x),
+                mix( dot( random2(i + vec2(0.0,1.0) ), f - vec2(0.0,1.0) ), 
+                     dot( random2(i + vec2(1.0,1.0) ), f - vec2(1.0,1.0) ), u.x), u.y);
+}
+
+vec3 magmaFunc(vec3 color, vec2 uv, float detail, float power,
+              float colorMul, float glowRate, bool animate, float noiseAmount)
+{
+    vec3 rockColor = vec3(0.09 + abs(sin(iTime * .75)) * .03, 0.02, .02);
+    float minDistance = 1.;
+    uv *= detail;
+    
+    vec2 cell = floor(uv);
+    vec2 frac = fract(uv);
+    
+    for (int i = -1; i <= 1; i++) {
+        for (int j = -1; j <= 1; j++) {
+        	vec2 cellDir = vec2(float(i), float(j));
+            vec2 randPoint = random2(cell + cellDir);
+            randPoint += noise(uv) * noiseAmount;
+            randPoint = animate ? 0.5 + 0.5 * sin(iTime * .35 + 6.2831 * randPoint) : randPoint;
+            minDistance = min(minDistance, length(cellDir + randPoint - frac));
+        }
+    }
+    	
+    float powAdd = sin(uv.x * 2. + iTime * glowRate) + sin(uv.y * 2. + iTime * glowRate);
+	vec3 outColor = vec3(color * pow(minDistance, power + powAdd * .95) * colorMul);
+    outColor.rgb = mix(rockColor, outColor.rgb, minDistance);
+    return outColor;
+}
+
+void mainImage( out vec4 fragColor, in vec2 fragCoord )
+{    
+	vec2 uv = fragCoord / iResolution.xy;
+    uv.x *= iResolution.x / iResolution.y;
+    uv.x += iTime * 0.3;
+    fragColor = vec4(0.);
+    fragColor.rgb += magmaFunc(vec3(1.5, .45, 0.), uv, 3.,  2.5, 1.15, 1.5, false, 1.5);
+    fragColor.rgb += magmaFunc(vec3(1.5, 0., 0.), uv, 6., 3., .4, 1., false, 0.);
+    fragColor.rgb += magmaFunc(vec3(1.2, .4, 0.), uv, 8., 4., .2, 1.9, true, 0.5);
+}
+
+  void main() {
+      mainImage(gl_FragColor, vUv * iResolution.xy);
+  }
+  `;
+
+  const vertexShader = `
+  varying vec2 vUv;
+  void main() {
+    vUv = uv;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );
+  }
+`;
+
+
+//Textures
+const loader = new THREE.TextureLoader();
+const meteorTexture = createTexture(loader,'https://threejsfundamentals.org/threejs/resources/images/bayer.png')
+const backgroundTexture = createTexture(loader,'Textures/nightsky.jpeg')
+scene.background = backgroundTexture;
+//Uniforms
+const meteorUniforms = createUniform(0,new THREE.Vector3(1, 1, 1) , meteorTexture);
+//Matererials
+const meteorMaterial = createMaterial(vertexShader,fragmentShader,meteorUniforms);
+//Objects
+const meteorites = [];
+//Spawners
+const spawnMeteor = () => {
+  const meteor = makeInstance(GeoMeteor, meteorMaterial, Math.floor((Math.random() * 5) - 3), 0,0)
+  scene.add(meteor);
+  meteorites.push(meteor);
+  console.log(meteor.material);
+  setTimeout(() => {
+  spawnMeteor();
+  }, 2500);
+}
+
+  spawnMeteor();
+   
+  
+  //Render it boi/ add rotation and shit
+  function render(time) {
+      time *= 0.001;  // convert to seconds
+
+
+    if (resizeRendererToDisplaySize(renderer)) {
+      const canvas = renderer.domElement;
+      camera.aspect = canvas.clientWidth / canvas.clientHeight;
+      camera.updateProjectionMatrix();
+    }
+
+    meteorites.forEach((cube, ndx) => {
+      const speed = 1 + ndx * .1;
+      const rot = time * speed;
+      cube.rotation.x = rot;
+      cube.rotation.y = rot;
+      cube.position.z += 0.05;
+    });
+    
+    meteorUniforms.iTime.value = time;
+
+    renderer.render(scene, camera);
+
+    requestAnimationFrame(render);
+
+}
+requestAnimationFrame(render);
+}
+
+
+
+//Check if responsive
+const  resizeRendererToDisplaySize = (renderer) =>  {
+    const canvas = renderer.domElement;
+    const width = canvas.clientWidth;
+    const height = canvas.clientHeight;
+    const needResize = canvas.width !== width || canvas.height !== height;
+    if (needResize) {
+      renderer.setSize(width, height, false);
+    }
+    return needResize;
+  }
+
+//Create an instance.
+
+const makeInstance = (geometry,material,x,y,z) => {
+    const instance = new THREE.Mesh(geometry, material);
+    
+    instance.position.x = x;
+    instance.position.y = y;
+    instance.position.z = z;
+    instance.hit = 0;
+
+    return instance;
+  }
+
+//Create Material
+const createMaterial = (vertexShader,fragmentShader,uniforms) => {
+  const material = new THREE.ShaderMaterial({
+  vertexShader,
+  fragmentShader,
+  uniforms
+});
+return material;
+
+}
+
+//Create Uniforms
+const createUniform = (time,resolution,texture) => {
+  const uniforms = {
+    iTime: { value: time },
+    iResolution: { value: resolution },
+    iChannel0: { value: texture },
+  };
+  return uniforms
+}
+
+
+//Create a texture
+const createTexture = (loader,file,wrapping) => {
+  const texture = loader.load(file);
+  texture.minFilter = THREE.NearestFilter;
+  texture.magFilter = THREE.NearestFilter;
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.RepeatWrapping;
+ 
+  return texture
+}
+
+const createBulletGEO = () => {
+//To be filled in
+}
+
+
+const createMeteoriteGEO = () => {
+const radius = 1;  
+const detail = 1;  
+const geometry = new THREE.TetrahedronBufferGeometry(radius, detail);
+return geometry;
+}
+
+//Create camera
+const createCamera = () => {
+  const fov = 75;
+  const aspect = 2;  // the canvas default
+  const near = 0.1;
+  const far = 10;
+  const camera = new THREE.PerspectiveCamera(fov, aspect, near, far);
+  return camera
+}
+
+//Set camera position
+const setCameraPosition = (camera,x,y,z) => {
+  camera.position.x = x;
+  camera.position.y = y;
+  camera.position.z = z;
+}
+
+// Create lighting
+const lighting = () => {
+ const color = 0xFFFFFF;
+  const intensity = 1;
+  const light = new THREE.DirectionalLight(color, intensity);
+  light.position.set(-1, 2, 4);
+  return light;
+}
+
+
+
+init();
+</script>
+</body>
+</html>
