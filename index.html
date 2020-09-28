@@ -64,9 +64,6 @@ const init = () => {
   const camera = createCamera();
   setCameraPosition(camera,0,0,20);
   backgroundMusic.loop = true;
-  setTimeout(() => {
-  backgroundMusic.play()
-  }, 3000);
   
   //Scene and geomotry
    const scene = new THREE.Scene();
@@ -268,6 +265,7 @@ const spawnMeteor = () => {
 const spawnBullet = () => {
   if (firing){
   laser.play();
+  backgroundMusic.play()
   const bullet = makeInstance(GeoBullet, bulletMaterial,shootPositionX,shootPositionY,19)
   const bulletBB = new THREE.Box3().setFromObject(bullet);
   scene.add(bullet);
