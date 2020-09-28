@@ -50,6 +50,7 @@ const init = () => {
   const canvas = document.querySelector('#c');
   const backgroundMusic = new Audio('Audio/music.mp3');
   const screenHitAudio = new Audio ("Audio/Screenhit.mp3");
+  const meteorHitAudio = new Audio ("Audio/MeteorHit.mp3");
   const laser = new Audio ('Audio/Laser.mp3')
   const p = document.createElement("p");
   const div = document.createElement("div");
@@ -193,6 +194,7 @@ const meteorUniforms = createUniform(0,new THREE.Vector3(1, 1, 1) , meteorTextur
 const meteorMaterial = createMaterial(vertexShader,fragmentShader,meteorUniforms);
 const backgroundMaterial = createMaterial(vertexShader,fragmentShader2,meteorUniforms);
 const bulletMaterial = new THREE.MeshBasicMaterial({color: 0xff0000});
+const hitMaterial = new THREE.MeshBasicMaterial({color: 0xff0000});
 //Objects
 const bgMesh = new THREE.Mesh(bgGeom, backgroundMaterial);
 bgScene.add(bgMesh);
@@ -246,7 +248,7 @@ const spawnMeteor = () => {
   meteorites.push(meteorPackage);
   setTimeout(() => {
   spawnMeteor();
-  }, 1500);
+  }, 800);
 }
 const spawnBullet = () => {
   if (firing){
@@ -289,6 +291,17 @@ const spawnBullet = () => {
       const rot = time * speed;
       meteor.meteor.rotation.x = rot;
       meteor.meteor.rotation.y = rot;
+      bullets.forEach(bullet => {
+        if(meteor.meteorBB.containsBox(bullet.bulletBB)){
+          console.log("collision");
+          meteor.meteor.hit -= 1;
+          meteorHitAudio.play();
+          meteorHit(hitMaterial,meteorMaterial,meteor.meteor);
+          if (meteor.meteor.hit === 0){
+           shredder(scene,index,meteorites,meteor.meteor);
+          }
+        }
+      })
       if (meteor.meteor.position.z > 20)
       {
         screenShake.shake( bgCam, new THREE.Vector3(0.05, 0.05, 0), 500 /* ms */ );
@@ -299,16 +312,22 @@ const spawnBullet = () => {
       else
       {
         meteor.meteor.position.z += 0.2;
+        meteor.meteorBB.min.z += 0.2;
+        meteor.meteorBB.max.z += 0.2;
       }
     });
 
+    //Bullets loop
     bullets.forEach(bullet => {
       let index = bullets.indexOf(bullet);
       bullet.bullet.position.x -= 0.01;
-      if (bullet.bullet.position.z <= 0){
+      if (bullet.bullet.position.z <= 10){
         shredder(scene,index,bullets,bullet);
       }
       bullet.bullet.position.z -= 0.5;
+      bullet.bulletBB.min.z -= 0.5
+      bullet.bulletBB.max.z -= 0.5
+
     });
 
   
@@ -330,8 +349,17 @@ requestAnimationFrame(render);
 
 
 
-//Screen Hit
+//Meteor hit
+const meteorHit = (hit,nohit,meteor) =>{
+  meteor.material = hit;
+  setTimeout(() => {
+  meteor.material = nohit;
+  }, 30);
+}
 
+
+
+//Screen Hit
 const screenHit = (div,firing,screenhit) => {
   document.body.appendChild(div);
   screenhit.play();
@@ -368,7 +396,7 @@ const makeInstance = (geometry,material,x,y,z) => {
     instance.position.x = x;
     instance.position.y = y;
     instance.position.z = z;
-    instance.hit = 0;
+    instance.hit = 6;
 
     return instance;
   }
